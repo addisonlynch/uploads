@@ -33,7 +33,14 @@ export interface WorkspaceRecord {
    */
   version?: number;
   provider: StorageProvider;
-  bucket: string;
+  /** Bucket name. Required by the bucket-backed providers; unused by `github-branch`. */
+  bucket?: string;
+  /**
+   * `github-branch`: the repository and orphan branch holding this workspace's objects, and a
+   * token with `contents: write` on it. Set instead of `bucket`/credentials — objects live in
+   * the customer's own repo, so that repo's access control governs who can read them.
+   */
+  github?: { owner: string; repo: string; branch: string; token: string };
   /** Name of an R2 binding declared in wrangler.jsonc (e.g. "UPLOADS"). When set, I/O uses the binding. */
   binding?: string;
   /** Key prefix inside the bucket (e.g. "myws/"). Set for shared-bucket workspaces; all I/O is confined under it. */
