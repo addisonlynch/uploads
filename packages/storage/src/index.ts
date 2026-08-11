@@ -1,13 +1,17 @@
 import { Files } from "files-sdk";
 export { createFilesRouter } from "files-sdk/api";
 import { r2 } from "files-sdk/r2";
+import { githubBranch, githubBranchUrl, type GithubBranchConfig } from "./github-branch";
+
+export { githubBranch, githubBranchUrl };
+export type { GithubBranchConfig };
 
 /**
  * Provider-agnostic storage config. `provider` selects the files-sdk adapter;
  * everything else is the superset of fields the supported adapters need.
  * Adding a provider = add a case in `createStorage` plus its peer deps.
  */
-export type StorageProvider = "r2";
+export type StorageProvider = "r2" | "github-branch";
 
 /** R2 jurisdictions with dedicated S3 endpoints (Cloudflare: eu = European Union, fedramp = FedRAMP). */
 export const R2_JURISDICTIONS = ["eu", "fedramp"] as const;
@@ -20,7 +24,8 @@ export function isR2Jurisdiction(value: string): value is R2Jurisdiction {
 
 export interface StorageConfig {
   provider: StorageProvider;
-  bucket: string;
+  /** Bucket name. Required by the bucket-backed providers; unused by `github-branch`. */
+  bucket?: string;
   /** Public base URL for objects served off a custom domain (e.g. https://media.example.com). */
   publicBaseUrl?: string;
   /** R2: Workers binding. When set, reads/writes go through the binding (no egress). */
@@ -43,6 +48,12 @@ export interface StorageConfig {
    * with "/". Applied via files-sdk's instance prefix; clients never see it.
    */
   prefix?: string;
+  /**
+   * github-branch: the repository and orphan branch that hold the objects, plus a token
+   * with `contents: write` on it. Set instead of `bucket`/credentials — this provider
+   * stores in the customer's own repo so the bytes inherit that repo's access control.
+   */
+  github?: GithubBranchConfig;
 }
 
 /** Segments of lowercase alphanumerics/._- each ending in "/"; first char alphanumeric (so "." and ".." are impossible). */
@@ -54,6 +65,7 @@ export function createStorage(config: StorageConfig): Files {
   }
   switch (config.provider) {
     case "r2": {
+      if (!config.bucket) throw new Error("r2 storage requires a `bucket`");
       const shared = {
         accountId: config.accountId,
         accessKeyId: config.accessKeyId,
@@ -67,18 +79,35 @@ export function createStorage(config: StorageConfig): Files {
         }),
       };
       // Binding mode (hybrid when HTTP creds are also set) vs pure HTTP mode.
+      const bucket = config.bucket;
       const adapter = config.r2Binding
-        ? r2({ binding: config.r2Binding, bucket: config.bucket, ...shared })
-        : r2({ bucket: config.bucket, ...shared });
+        ? r2({ binding: config.r2Binding, bucket, ...shared })
+        : r2({ bucket, ...shared });
       return new Files({ adapter, prefix: config.prefix });
+    }
+    case "github-branch": {
+      if (!config.github) {
+        throw new Error("github-branch storage requires a `github` config block");
+      }
+      return new Files({ adapter: githubBranch(config.github), prefix: config.prefix });
     }
     default:
       throw new Error(`Unsupported storage provider: ${config.provider satisfies never}`);
   }
 }
 
-/** Public URL for a key when the bucket is fronted by a custom domain. Includes the workspace prefix. */
+/**
+ * Stable public URL for a key, or null when the provider has no way to build one. Includes
+ * the workspace prefix. For bucket providers that means a configured custom domain; for
+ * `github-branch` the URL is always available, since it is the repo's own blob URL.
+ */
 export function publicUrl(config: StorageConfig, key: string): string | null {
+  // github-branch builds its own: the `?raw=true` query cannot be expressed by the
+  // `base + "/" + key` shape below.
+  if (config.provider === "github-branch") {
+    if (!config.github) return null;
+    return githubBranchUrl(config.github, `${config.prefix ?? ""}${key}`);
+  }
   if (!config.publicBaseUrl) return null;
   const base = config.publicBaseUrl.replace(/\/$/, "");
   const fullKey = `${config.prefix ?? ""}${key}`;
@@ -162,6 +191,9 @@ export function publicAndEmbedUrls(
   opts?: EmbedUrlOptions,
 ): { url: string | null; embedUrl: string | null } {
   const url = publicUrl(config, key);
+  // Same-origin URLs never pass through Camo, so there is no twin to revalidate against:
+  // the stable URL is already the embed URL.
+  if (config.provider === "github-branch") return { url, embedUrl: url };
   return {
     url,
     embedUrl: embedUrlFromPublic(url, {
