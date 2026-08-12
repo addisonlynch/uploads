@@ -91,8 +91,9 @@ Machine-managed storage branch. It holds upload objects so they can be embedded 
 same-origin \`github.com/.../blob/${branch}/<key>?raw=true\` URL, which renders for anyone who
 can read this repository and 404s for everyone else.
 
-Orphan by design: it shares no history with the default branch, so nothing here appears in a
-normal clone or in the default branch's log.
+Orphan by design: it shares no history with the default branch, so nothing here appears in the
+default branch's log or working tree. A default clone still fetches these objects into
+\`.git\`, though; only shallow and single-branch clones skip them.
 
 Do not edit by hand. Reclaiming space means deleting and recreating this branch rather than
 deleting files from it, since old blobs stay reachable by sha.

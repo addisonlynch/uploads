@@ -103,18 +103,21 @@ The demo covers both cases.
   the same for the sidecar, then visibility polls) against a 50-subrequest ceiling on Workers
   Free. Fine per upload; worth knowing before a bulk migration.
 
-## Deliberately not done
+## Wiring: enough to run, not enough to ship
 
-**No configuration wiring.** The provider works and is selectable through `createStorage`,
-but nothing plumbs it through the workspace record, `workspace:add`, or the admin UI — so it
-cannot yet be chosen the way `r2` can.
+A workspace record can carry a `github: { owner, repo, branch, token }` block, `storageConfig`
+passes it through, and `workspace:add --github-repo` seeds one. That is deliberately the
+minimum needed to drive the provider as a running service (`wrangler dev --local`, real HTTP
+upload, real repo) rather than only through a test harness.
 
-That is on purpose. How a workspace names a repo destination, where the token comes from
-(App installation token is the obvious answer), and how it interacts with `byoBucketEnabled`,
-plan gating and `publicBaseUrl` are all product decisions with opinions attached. This proves
-the mechanism works so that conversation can start from something real.
+The product decisions are **not** made here, and this wiring should not be read as proposing
+them: where the token comes from (an App installation token is the obvious answer, not a
+stored PAT), how this interacts with `byoBucketEnabled`, plan gating and `publicBaseUrl`, and
+whether the destination belongs on the workspace at all rather than per-repo. The token is
+stored as a plain field, unlike `accessKeyId`/`secretAccessKey`, which go through
+`openCredentialFields` — that alone is reason not to ship this shape as-is.
 
-Also not done: any change to the CLI or MCP surfaces, and the `README.md` "Adding a provider"
+Also not done: any change to the CLI, MCP or admin UI surfaces, and the `README.md` "Adding a provider"
 checklist step that assumes a provider ships as a files-sdk peer dependency — this adapter is
 in-repo instead, which is the one deliberate deviation from that checklist.
 
