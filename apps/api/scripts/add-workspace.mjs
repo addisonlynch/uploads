@@ -158,32 +158,45 @@ const tokens = [
   },
 ];
 
-const record = opts.bucket
+const record = opts["github-repo"]
   ? {
-      // BYO mode: dedicated bucket, credentials from flags or .env.
-      provider: "r2",
-      bucket: opts.bucket,
-      binding: opts.binding,
-      publicBaseUrl: opts["public-base-url"] ?? process.env.R2_PUBLIC_BASE_URL,
+      // github-branch: objects live on an orphan branch of the customer's own repo, so the
+      // repo's access control governs who can read them. No bucket, no credentials.
+      provider: "github-branch",
+      github: {
+        owner: String(opts["github-repo"]).split("/")[0],
+        repo: String(opts["github-repo"]).split("/")[1],
+        branch: opts["github-branch"] ?? "uploads-objects",
+        token: opts["github-token"] ?? process.env.GITHUB_TOKEN,
+      },
       tokens,
-      accountId: opts["account-id"] ?? process.env.R2_ACCOUNT_ID,
-      accessKeyId: opts["access-key-id"] ?? process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: opts["secret-access-key"] ?? process.env.R2_SECRET_ACCESS_KEY,
     }
-  : {
-      // Shared mode: a "<name>/" prefix in the shared bucket. No env credential
-      // fallback — R2_* env keys are scoped to BYO buckets, and presigning
-      // against the shared bucket is deferred (see the design spec).
-      provider: "r2",
-      bucket: SHARED.bucket,
-      binding: opts.binding ?? SHARED.binding,
-      prefix: `${name}/`,
-      publicBaseUrl: opts["public-base-url"] ?? SHARED.publicBaseUrl,
-      tokens,
-      accountId: opts["account-id"],
-      accessKeyId: opts["access-key-id"],
-      secretAccessKey: opts["secret-access-key"],
-    };
+  : opts.bucket
+    ? {
+        // BYO mode: dedicated bucket, credentials from flags or .env.
+        provider: "r2",
+        bucket: opts.bucket,
+        binding: opts.binding,
+        publicBaseUrl: opts["public-base-url"] ?? process.env.R2_PUBLIC_BASE_URL,
+        tokens,
+        accountId: opts["account-id"] ?? process.env.R2_ACCOUNT_ID,
+        accessKeyId: opts["access-key-id"] ?? process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: opts["secret-access-key"] ?? process.env.R2_SECRET_ACCESS_KEY,
+      }
+    : {
+        // Shared mode: a "<name>/" prefix in the shared bucket. No env credential
+        // fallback — R2_* env keys are scoped to BYO buckets, and presigning
+        // against the shared bucket is deferred (see the design spec).
+        provider: "r2",
+        bucket: SHARED.bucket,
+        binding: opts.binding ?? SHARED.binding,
+        prefix: `${name}/`,
+        publicBaseUrl: opts["public-base-url"] ?? SHARED.publicBaseUrl,
+        tokens,
+        accountId: opts["account-id"],
+        accessKeyId: opts["access-key-id"],
+        secretAccessKey: opts["secret-access-key"],
+      };
 // Shared/agent template first; flags override (or --no-default-limits skips it).
 if (!opts["no-default-limits"]) {
   Object.assign(record, sharedAgentLimitFields());

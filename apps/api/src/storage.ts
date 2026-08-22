@@ -67,6 +67,7 @@ export async function storageConfig(env: Env, ws: WorkspaceRecord): Promise<Stor
   }
   return {
     provider: ws.provider,
+    ...(ws.github ? { github: ws.github } : {}),
     bucket: ws.bucket,
     prefix: ws.prefix,
     publicBaseUrl: ws.publicBaseUrl,
